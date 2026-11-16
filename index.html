@@ -540,22 +540,61 @@
     return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
+  /* ---------- AI via local server (ILMU API) ---------- */
+  function readFileAsBase64(file) {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result.split(',')[1]);
+      r.onerror = reject;
+      r.readAsDataURL(file);
+    });
+  }
+
+  async function callAI(name, lang, market, cat, photoFile) {
+    let body;
+    if (photoFile) {
+      body = { name, lang, market, cat, image: await readFileAsBase64(photoFile), mediaType: photoFile.type || 'image/jpeg' };
+    } else {
+      body = { name, lang, market, cat };
+    }
+    const res = await fetch('/api/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'AI request failed');
+    return data.listing;
+  }
+
   /* ---------- Generate / Regenerate ---------- */
   let variant = 0;
   function runGeneration() {
     resultsEl.style.display = 'none';
     generatingEl.style.display = 'block';
+    generatingEl.querySelector('.spinner').nextElementSibling.textContent =
+      window.ILMU_CONFIG ? 'AI is analyzing your photo and writing your listing…' : 'AI is writing your listing…';
     generateBtn.disabled = true;
-    setTimeout(() => {
-      const name = $('product-name').value.trim();
-      currentListing = generateListing(name, $('language').value, $('marketplace').value, selectedCategory, variant);
-      variant++;
-      generatingEl.style.display = 'none';
-      generateBtn.disabled = false;
-      render(currentListing);
-      resultsEl.style.display = 'block';
-      resultsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 1400);
+
+    const name = $('product-name').value.trim();
+    const lang = $('language').value, market = $('marketplace').value;
+
+    callAI(name, lang, market, selectedCategory, photoFile)
+      .catch(err => {
+        console.error('AI generation failed:', err);
+        showToast('AI unavailable — using template fallback');
+        return null;
+      })
+      .then(listing => {
+        if (!listing) listing = generateListing(name, lang, market, selectedCategory, variant);
+        variant++;
+        currentListing = listing;
+        generatingEl.style.display = 'none';
+        generateBtn.disabled = false;
+        render(listing);
+        resultsEl.style.display = 'block';
+        resultsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
   }
 
   generateBtn.addEventListener('click', runGeneration);
