@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ListingAI — Product Listing Writer</title>
+<style>
+  :root {
+    --bg: #f5f7fb;
+    --card: #ffffff;
+    --primary: #5b5bd6;
+    --primary-dark: #4747b8;
+    --accent: #ff6b6b;
+    --text: #1f2333;
+    --muted: #6b7280;
+    --border: #e5e8f0;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+  header {
+    background: linear-gradient(135deg, #5b5bd6, #8b5bd6);
+    color: #fff;
+    padding: 28px 16px 36px;
+    text-align: center;
+  }
+  header h1 { font-size: 1.6rem; font-weight: 700; }
+  header p { opacity: .9; margin-top: 6px; font-size: .95rem; }
+  main {
+    max-width: 760px;
+    margin: -16px auto 40px;
+    padding: 0 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .card {
+    background: var(--card);
+    border-radius: var(--radius);
+    box-shadow: 0 2px 12px rgba(30,35,80,.08);
+    padding: 20px;
+  }
+  .card h2 {
+    font-size: 1.05rem;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .step-num {
+    background: var(--primary);
+    color: #fff;
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: .8rem;
+    flex-shrink: 0;
+  }
+  /* Upload area */
+  .dropzone {
+    border: 2px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 28px 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .2s, background .2s;
+  }
+  .dropzone:hover, .dropzone.dragover {
+    border-color: var(--primary);
+    background: #f8f8ff;
+  }
+  .dropzone .icon { font-size: 2.2rem; }
+  .dropzone p { color: var(--muted); font-size: .9rem; margin-top: 8px; }
+  .dropzone strong { color: var(--primary); }
+  #preview-wrap { display: none; text-align: center; }
+  #preview {
+    max-width: 200px;
+    max-height: 200px;
+    border-radius: 12px;
+    object-fit: cover;
+    box-shadow: 0 2px 8px rgba(0,0,0,.12);
+  }
+  #file-name { color: var(--muted); font-size: .85rem; margin-top: 8px; }
+  #change-photo {
+    background: none;
+    border: none;
+    color: var(--primary);
+    font-size: .85rem;
+    cursor: pointer;
+    margin-top: 6px;
+    text-decoration: underline;
+  }
+  /* Fields */
+  .field { margin-bottom: 14px; }
+  .field label {
+    display: block;
+    font-size: .85rem;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+  .field input[type=text], .field select, .field textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-size: .95rem;
+    font-family: inherit;
+    background: #fafbfd;
+    outline: none;
+    transition: border-color .2s;
+  }
+  .field input:focus, .field select:focus, .field textarea:focus {
+    border-color: var(--primary);
+  }
+  .chip-group { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip {
+    padding: 8px 14px;
+    border: 1.5px solid var(--border);
+    border-radius: 999px;
+    background: #fff;
+    cursor: pointer;
+    font-size: .9rem;
+    transition: all .15s;
+    user-select: none;
+  }
+  .chip:hover { border-color: var(--primary); }
+  .chip.selected {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: #fff;
+  }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; }
+  .row .field { flex: 1 1 160px; margin-bottom: 0; }
+  #generate-btn {
+    width: 100%;
+    margin-top: 18px;
+    padding: 13px;
+    background: var(--primary);
+    color: #fff;
+    border: none;
+    border-radius: 12px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .2s, transform .1s;
+  }
+  #generate-btn:hover:not(:disabled) { background: var(--primary-dark); }
+  #generate-btn:active { transform: scale(.98); }
+  #generate-btn:disabled { opacity: .6; cursor: not-allowed; }
+  /* Results */
+  #results { display: none; }
+  .result-block { border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; }
+  .result-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  .result-head .label { font-size: .8rem; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); }
+  .result-body { font-size: .95rem; line-height: 1.55; white-space: pre-wrap; }
+  .result-body.editing textarea {
+    width: 100%;
+    min-height: 80px;
+    padding: 10px;
+    border: 1px solid var(--primary);
+    border-radius: 8px;
+    font: inherit;
+    resize: vertical;
+    outline: none;
+  }
+  .selling-points { padding-left: 0; list-style: none; }
+  .selling-points li { padding-left: 24px; position: relative; margin-bottom: 6px; }
+  .selling-points li::before { content: "✓"; position: absolute; left: 0; color: var(--primary); font-weight: 700; }
+  .hashtags { color: var(--primary-dark); font-weight: 500; line-height: 1.7; }
+  .icon-btn {
+    background: #f1f2fa;
+    border: none;
+    border-radius: 8px;
+    padding: 5px 10px;
+    font-size: .8rem;
+    cursor: pointer;
+    color: var(--text);
+    transition: background .15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .icon-btn:hover { background: #e4e6f4; }
+  .actions-bar { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+  .btn {
+    padding: 11px 18px;
+    border-radius: 12px;
+    border: none;
+    font-size: .95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .btn-outline { background: #fff; border: 1.5px solid var(--primary); color: var(--primary); }
+  .btn-outline:hover { background: #f0f0ff; }
+  .btn-solid { background: var(--primary); color: #fff; }
+  .btn-solid:hover { background: var(--primary-dark); }
+  .copied-toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: #1f2333;
+    color: #fff;
+    padding: 10px 20px;
+    border-radius: 999px;
+    font-size: .9rem;
+    opacity: 0;
+    pointer-events: none;
+    transition: all .3s;
+    z-index: 100;
+  }
+  .copied-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .generating { text-align: center; padding: 30px 0; color: var(--muted); display: none; }
+  .spinner {
+    width: 36px; height: 36px;
+    border: 3px solid var(--border);
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    margin: 0 auto 12px;
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  footer { text-align: center; color: var(--muted); font-size: .8rem; padding-bottom: 30px; }
+  @media (max-width: 480px) {
+    header h1 { font-size: 1.3rem; }
+    .card { padding: 16px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🛍️ ListingAI</h1>
+  <p>Upload a photo — get a ready-to-post product listing in seconds</p>
+</header>
+
+<main>
+  <!-- Step 1: Photo -->
+  <section class="card">
+    <h2><span class="step-num">1</span> Upload product photo</h2>
+    <div class="dropzone" id="dropzone">
+      <div class="icon">📷</div>
+      <p><strong>Tap to upload</strong> or drag &amp; drop your product photo here<br>(JPG / PNG / WebP)</p>
+    </div>
+    <input type="file" id="file-input" accept="image/*" hidden>
+    <div id="preview-wrap">
+      <img id="preview" alt="Product preview">
+      <div id="file-name"></div>
+      <button id="change-photo">Change photo</button>
+    </div>
+  </section>
+
+  <!-- Step 2: Details -->
+  <section class="card">
+    <h2><span class="step-num">2</span> Tell us about your product</h2>
+
+    <div class="field">
+      <label>Product name / keywords</label>
+      <input type="text" id="product-name" placeholder="e.g. handmade ceramic mug">
+    </div>
+
+    <div class="row">
+      <div class="field">
+        <label>Language</label>
+        <select id="language">
+          <option value="en">English</option>
+          <option value="bm">Bahasa Melayu</option>
+          <option value="zh">中文</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Marketplace</label>
+        <select id="marketplace">
+          <option value="shopee">Shopee</option>
+          <option value="lazada">Lazada</option>
+          <option value="tiktok">TikTok Shop</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="field" style="margin-top:14px">
+      <label>Category</label>
+      <div class="chip-group" id="category-chips">
+        <span class="chip selected" data-cat="fashion">👗 Fashion</span>
+        <span class="chip" data-cat="beauty">💄 Beauty</span>
+        <span class="chip" data-cat="food">🍰 Food</span>
+        <span class="chip" data-cat="electronics">📱 Electronics</span>
+        <span class="chip" data-cat="home">🏠 Home &amp; Living</span>
+        <span class="chip" data-cat="accessories">👜 Accessories</span>
+      </div>
+    </div>
+
+    <button id="generate-btn" disabled>✨ Generate Listing</button>
+    <div class="generating" id="generating">
+      <div class="spinner"></div>
+      AI is writing your listing…
+    </div>
+  </section>
+
+  <!-- Step 3: Results -->
+  <section class="card" id="results">
+    <h2><span class="step-num">3</span> Your listing</h2>
+
+    <div class="result-block" id="block-title">
+      <div class="result-head">
+        <span class="label">Product Title</span>
+        <span>
+          <button class="icon-btn" data-copy="title">📋 Copy</button>
+          <button class="icon-btn" data-edit="title">✏️ Edit</button>
+        </span>
+      </div>
+      <div class="result-body" id="body-title"></div>
+    </div>
+
+    <div class="result-block" id="block-desc">
+      <div class="result-head">
+        <span class="label">Description</span>
+        <span>
+          <button class="icon-btn" data-copy="desc">📋 Copy</button>
+          <button class="icon-btn" data-edit="desc">✏️ Edit</button>
+        </span>
+      </div>
+      <div class="result-body" id="body-desc"></div>
+    </div>
+
+    <div class="result-block" id="block-points">
+      <div class="result-head">
+        <span class="label">Key Selling Points</span>
+        <span>
+          <button class="icon-btn" data-copy="points">📋 Copy</button>
+          <button class="icon-btn" data-edit="points">✏️ Edit</button>
+        </span>
+      </div>
+      <div class="result-body" id="body-points"></div>
+    </div>
+
+    <div class="result-block" id="block-tags">
+      <div class="result-head">
+        <span class="label">Hashtags</span>
+        <span>
+          <button class="icon-btn" data-copy="tags">📋 Copy</button>
+          <button class="icon-btn" data-edit="tags">✏️ Edit</button>
+        </span>
+      </div>
+      <div class="result-body hashtags" id="body-tags"></div>
+    </div>
+
+    <div class="actions-bar">
+      <button class="btn btn-outline" id="regenerate-btn">🔄 Regenerate</button>
+      <button class="btn btn-solid" id="copy-all-btn">📋 Copy Full Listing</button>
+    </div>
+  </section>
+
+  <footer>ListingAI • Built for small businesses on Shopee, Lazada &amp; TikTok Shop</footer>
+</main>
+
+<div class="copied-toast" id="toast">Copied!</div>
+
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const dropzone = $('dropzone'), fileInput = $('file-input'), previewWrap = $('preview-wrap'),
+        preview = $('preview'), fileNameEl = $('file-name'), generateBtn = $('generate-btn'),
+        generatingEl = $('generating'), resultsEl = $('results'), toast = $('toast');
+
+  let photoFile = null, currentListing = null;
+  let selectedCategory = 'fashion';
+
+  /* ---------- Upload ---------- */
+  dropzone.addEventListener('click', () => fileInput.click());
+  $('change-photo').addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => { if (fileInput.files[0]) setPhoto(fileInput.files[0]); });
+
+  ['dragover', 'dragleave', 'drop'].forEach(ev => {
+    dropzone.addEventListener(ev, (e) => {
+      e.preventDefault();
+      dropzone.classList.toggle('dragover', ev === 'dragover');
+      if (ev === 'drop' && e.dataTransfer.files[0]) setPhoto(e.dataTransfer.files[0]);
+    });
+  });
+
+  function setPhoto(file) {
+    if (!file.type.startsWith('image/')) { showToast('Please upload an image file'); return; }
+    photoFile = file;
+    preview.src = URL.createObjectURL(file);
+    fileNameEl.textContent = file.name;
+    dropzone.style.display = 'none';
+    previewWrap.style.display = 'block';
+    validate();
+  }
+
+  /* ---------- Category chips ---------- */
+  document.querySelectorAll('#category-chips .chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('#category-chips .chip').forEach(c => c.classList.remove('selected'));
+      chip.classList.add('selected');
+      selectedCategory = chip.dataset.cat;
+    });
+  });
+
+  /* ---------- Validation ---------- */
+  $('product-name').addEventListener('input', validate);
+  function validate() {
+    generateBtn.disabled = !(photoFile && $('product-name').value.trim().length > 1);
+  }
+
+  /* ---------- Listing engine (built-in AI templates) ---------- */
+  const LANGS = {
+    en: {
+      titleTpl: {
+        shopee: (n, c) => `${titleCase(n)} | ${CATEGORIES[c].en} ✅ COD Ready Stock Fast Shipping`,
+        lazada: (n, c) => `${titleCase(n)} — Premium ${CATEGORIES[c].en} | 100% Authentic & Ready Stock`,
+        tiktok: (n, c) => `${titleCase(n)} 🔥 Viral ${CATEGORIES[c].en} You NEED in 2026!`
+      },
+      desc: {
+        shopee: (n, c) => `Looking for the perfect ${n}? You've found it! ✨\n\nOur ${n} is one of our best-selling ${CATEGORIES[c].en.toLowerCase()} items — loved by hundreds of happy customers. Carefully packed and shipped within 24 hours.\n\n🛒 Shop with confidence:\n✅ Ready stock, ships fast\n✅ Quality checked before sending\n✅ Friendly customer support\n\nGrab yours now before it sells out! 💜`,
+        lazada: (n, c) => `Product Overview\n\nUpgrade your everyday with our premium ${n}. Designed for quality and built to last, it's the smart choice for anyone who values great ${CATEGORIES[c].en.toLowerCase()}.\n\nWhy buy from us:\n• 100% authentic product\n• Ready stock & fast dispatch\n• Secure packaging\n• Hassle-free returns\n\nOrder today and experience the difference!`,
+        tiktok: (n, c) => `POV: you just found the BEST ${n} on TikTok Shop 🤩\n\nThis is the one everyone's adding to cart — premium quality, gorgeous design, and worth every sen.\n\nDon't say we didn't warn you 😌\nTap the cart now — limited stock! 🛒💨`
+      },
+      points: {
+        shopee: (n) => [`Premium quality ${n} — value for money`, 'Ready stock, ships within 24 hours', 'COD available in selected areas', 'Carefully packed to arrive in perfect condition', 'Responsive seller & easy returns'],
+        lazada: (n) => ['100% authentic, quality-assured product', `High-quality materials used in our ${n}`, 'Fast dispatch with parcel tracking', 'Secure & protective packaging', '7-day hassle-free return policy'],
+        tiktok: (n) => [`Viral ${n} everyone is talking about 🔥`, 'TikTok-famous quality at an affordable price', 'Limited stock — new batches sell out fast', 'Perfect gift idea for friends & family', 'Watch our live videos for real product demos']
+      },
+      tags: {
+        shopee: (n, c) => [...baseTags(n, c), '#ShopeeMY', '#ShopeeFinds', '#CODAvailable', '#ReadyStock'],
+        lazada: (n, c) => [...baseTags(n, c), '#LazadaMY', '#LazadaFinds', '#AuthenticProduct', '#OnlineShopping'],
+        tiktok: (n, c) => [...baseTags(n, c), '#TikTokShop', '#TikTokMadeMeBuyIt', '#ViralProducts', '#FYP']
+      },
+      ui: { edit: 'Edit', copy: 'Copy' }
+    },
+    bm: {
+      titleTpl: {
+        shopee: (n, c) => `${titleCase(n)} | ${CATEGORIES[c].bm} ✅ COD Stok Sedia Penghantaran Pantas`,
+        lazada: (n, c) => `${titleCase(n)} — ${CATEGORIES[c].bm} Premium | 100% Original & Stok Sedia`,
+        tiktok: (n, c) => `${titleCase(n)} 🔥 ${CATEGORIES[c].bm} Viral Wajib Beli Tahun 2026!`
+      },
+      desc: {
+        shopee: (n, c) => `Cari ${n} yang terbaik? Anda dah jumpa! ✨\n\n${titleCase(n)} kami adalah antara produk ${CATEGORIES[c].bm.toLowerCase()} paling laku — dipercayai ratusan pelanggan yang berpuas hati. Dipack dengan teliti dan diship dalam masa 24 jam.\n\n🛒 Beli dengan yakin:\n✅ Stok sedia, penghantaran pantas\n✅ Kualiti diperiksa sebelum dihantar\n✅ Khidmat pelanggan yang mesra\n\nGrab sekarang sebelum habis! 💜`,
+        lazada: (n, c) => `Ringkasan Produk\n\nTingkatkan gaya harian anda dengan ${n} premium kami. Direka untuk kualiti dan tahan lama — pilihan bijak untuk sesiapa yang menghargai ${CATEGORIES[c].bm.toLowerCase()} yang hebat.\n\nKenapa beli dengan kami:\n• Produk 100% original\n• Stok sedia & penghantaran pantas\n• Pembungkusan selamat\n• Pemulangan tanpa masalah\n\nOrder hari ini dan rasakan perbezaannya!`,
+        tiktok: (n, c) => `POV: anda baru jumpa ${n} TERBAIK di TikTok Shop 🤩\n\nInilah yang semua orang sedang add to cart — kualiti premium, design cantik, dan berbaloi dengan harga.\n\nJangan kata kami tak bagi tahu 😌\nTekan troli sekarang — stok terhad! 🛒💨`
+      },
+      points: {
+        shopee: (n) => [`${titleCase(n)} berkualiti premium — berbaloi dengan harga`, 'Stok sedia, diship dalam 24 jam', 'COD tersedia di kawasan terpilih', 'Dipack rapi supaya sampai dalam keadaan sempurna', 'Seller responsif & pemulangan mudah'],
+        lazada: (n) => ['Produk 100% original & jaminan kualiti', `Bahan berkualiti tinggi digunakan untuk ${n}`, 'Penghantaran pantas dengan tracking parcel', 'Pembungkusan selamat & terlindung', 'Polisi pemulangan 7 hari tanpa was-was'],
+        tiktok: (n) => [`${titleCase(n)} viral yang semua orang cerita 🔥`, 'Kualiti famous TikTok pada harga mampu milik', 'Stok terhad — batch baru cepat sold out', 'Ideai hadiah terbaik untuk keluarga & rakan', 'Tengok live video kami untuk demo produk sebenar']
+      },
+      tags: {
+        shopee: (n, c) => [...baseTags(n, c, true), '#ShopeeMY', '#ShopeeFinds', '#BajetRuncit', '#StokSedia'],
+        lazada: (n, c) => [...baseTags(n, c, true), '#LazadaMY', '#JomShopping', '#ProdukOriginal', '#BeliOnline'],
+        tiktok: (n, c) => [...baseTags(n, c, true), '#TikTokShop', '#TikTokMadeMeBuyIt', '#ProdukViral', '#FYP']
+      },
+      ui: { edit: 'Edit', copy: 'Copy' }
+    },
+    zh: {
+      titleTpl: {
+        shopee: (n, c) => `【现货】${n} | ${CATEGORIES[c].zh} ✅ COD货到付款 快速发货`,
+        lazada: (n, c) => `${n} — 高级${CATEGORIES[c].zh} | 100%正品 现货直出`,
+        tiktok: (n, c) => `${n} 🔥 2026年TikTok爆款${CATEGORIES[c].zh} 必买！`
+      },
+      desc: {
+        shopee: (n, c) => `正在寻找完美的${n}？你已经找到了！✨\n\n我们的${n}是热销${CATEGORIES[c].zh.toLowerCase()}之一，深受数百位顾客喜爱。精心包装，24小时内发货。\n\n🛒 放心购买：\n✅ 现货直发，速度快\n✅ 发货前严格质检\n✅ 客服亲切，售后无忧\n\n库存有限，马上下单！💜`,
+        lazada: (n, c) => `商品简介\n\n用我们优质的${n}提升生活品质。精心设计、经久耐用，是重视${CATEGORIES[c].zh.toLowerCase()}品质的您的明智之选。\n\n为什么选择我们：\n• 100%正品保证\n• 现货充足，发货迅速\n• 包装安全妥当\n• 退货方便，无后顾之忧\n\n今天就下单，体验不一样的高品质！`,
+        tiktok: (n, c) => `POV：你刚在TikTok Shop发现超好用的${n} 🤩\n\n这就是大家都在疯狂加购的那一款——品质超赞、颜值超高，价格超值！\n\n别怪我没提醒你 😌\n快点击购物车——数量有限，售完即止！🛒💨`
+      },
+      points: {
+        shopee: (n) => [`优质${n}，物超所值`, '现货供应，24小时内发货', '指定地区支持货到付款 (COD)', '包装严谨，完好送达', '卖家回复快，退换方便'],
+        lazada: (n) => ['100%正品，品质保证', `${n}采用高品质材料制作`, '快速发货，全程物流追踪', '包装安全，有效保护商品', '7天无理由退换服务'],
+        tiktok: (n) => [`全网疯传的爆款${n} 🔥`, 'TikTok人气好物，价格亲民', '数量有限，补货很快售罄', '送礼自用两相宜', '观看直播了解真实产品展示']
+      },
+      tags: {
+        shopee: (n, c) => [...baseTags(n, c), '#ShopeeMY', '#Shopee好物', '#现货直发', '#货到付款'],
+        lazada: (n, c) => [...baseTags(n, c), '#LazadaMY', '#正品保证', '#网购推荐', '#限时优惠'],
+        tiktok: (n, c) => [...baseTags(n, c), '#TikTokShop', '#TikTokMadeMeBuyIt', '#爆款推荐', '#FYP']
+      },
+      ui: { edit: 'Edit', copy: 'Copy' }
+    }
+  };
+
+  const CATEGORIES = {
+    fashion:     { en: 'Fashion', bm: 'Fesyen', zh: '时尚服饰' },
+    beauty:      { en: 'Beauty', bm: 'Kecantikan', zh: '美妆护肤' },
+    food:        { en: 'Food & Snacks', bm: 'Makanan', zh: '美食' },
+    electronics: { en: 'Electronics', bm: 'Elektronik', zh: '电子产品' },
+    home:        { en: 'Home & Living', bm: 'Rumah Tangga', zh: '家居生活' },
+    accessories: { en: 'Accessories', bm: 'Aksesori', zh: '配饰' }
+  };
+
+  function titleCase(s) { return s.replace(/\b\w/g, ch => ch.toUpperCase()); }
+
+  function baseTags(name, cat, bm) {
+    const slug = name.trim().toLowerCase().replace(/[^\w\s\u4e00-\u9fff]+/g, '').split(/\s+/).filter(Boolean).slice(0, 3);
+    const tags = slug.map(w => '#' + w.replace(/\s+/g, ''));
+    const catTag = { fashion:'#Fashion', beauty:'#Beauty', food:'#Foodie', electronics:'#TechFind', home:'#HomeDecor', accessories:'#Accessories' };
+    tags.push(catTag[cat] || '#Product');
+    return tags;
+  }
+
+  function generateListing(name, lang, market, cat, variant) {
+    const L = LANGS[lang];
+    // small variation between regenerations
+    const hooks = {
+      en: ['Must-have alert!', 'Back by popular demand!', 'Our bestseller just got better!'],
+      bm: ['Jangan miss! Ini yang korang cari!', 'Bestseller kami kembali!', 'Produk paling laku bulan ini!'],
+      zh: ['爆款来啦！', '回购率超高的好物！', '本月最畅销单品！']
+    };
+    const hook = hooks[lang][variant % hooks[lang].length];
+    const n = name.trim();
+    return {
+      title: L.titleTpl[market](n, cat),
+      desc: hook + '\n\n' + L.desc[market](n, cat),
+      points: L.points[market](n),
+      tags: L.tags[market](n, cat).join(' ')
+    };
+  }
+
+  /* ---------- Render ---------- */
+  function render(l) {
+    $('body-title').textContent = l.title;
+    $('body-desc').textContent = l.desc;
+    $('body-points').innerHTML = '<ul class="selling-points">' +
+      l.points.map(p => `<li>${escapeHtml(p)}</li>`).join('') + '</ul>';
+    $('body-tags').textContent = l.tags;
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  /* ---------- Generate / Regenerate ---------- */
+  let variant = 0;
+  function runGeneration() {
+    resultsEl.style.display = 'none';
+    generatingEl.style.display = 'block';
+    generateBtn.disabled = true;
+    setTimeout(() => {
+      const name = $('product-name').value.trim();
+      currentListing = generateListing(name, $('language').value, $('marketplace').value, selectedCategory, variant);
+      variant++;
+      generatingEl.style.display = 'none';
+      generateBtn.disabled = false;
+      render(currentListing);
+      resultsEl.style.display = 'block';
+      resultsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 1400);
+  }
+
+  generateBtn.addEventListener('click', runGeneration);
+  $('regenerate-btn').addEventListener('click', runGeneration);
+
+  /* ---------- Copy ---------- */
+  function copyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(() => showToast('Copied! ✓'));
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      showToast('Copied! ✓');
+    }
+  }
+
+  $('copy-all-btn').addEventListener('click', () => {
+    if (!currentListing) return;
+    const blocks = readCurrentBlocks();
+    const full = `【${blocks.title}】\n\n${blocks.desc}\n\n${blocks.pointsText}\n\n${blocks.tags}`;
+    copyText(full);
+  });
+
+  document.querySelectorAll('[data-copy]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.copy;
+      const blocks = readCurrentBlocks();
+      copyText(key === 'points' ? blocks.pointsText : blocks[key]);
+    });
+  });
+
+  function readCurrentBlocks() {
+    // read from live DOM so manual edits are included
+    const pointsText = [...document.querySelectorAll('#body-points li')]
+      .map(li => '• ' + li.textContent).join('\n') ||
+      ($('body-points').querySelector('textarea')?.value ?? '');
+    return {
+      title: currentText('body-title'),
+      desc: currentText('body-desc'),
+      points: currentText('body-points'),
+      pointsText,
+      tags: currentText('body-tags')
+    };
+  }
+  function currentText(id) {
+    const el = $(id);
+    const ta = el.querySelector('textarea');
+    return ta ? ta.value : el.textContent.trim();
+  }
+
+  /* ---------- Edit ---------- */
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-edit]');
+    if (!btn) return;
+    const key = btn.dataset.edit;
+    const body = $('body-' + key);
+    const ta = body.querySelector('textarea');
+
+    if (ta) {
+      // finishing edit
+      const val = ta.value;
+      if (key === 'points') {
+        const lines = val.split('\n').map(l => l.replace(/^[-•✓]\s*/, '').trim()).filter(Boolean);
+        body.innerHTML = '<ul class="selling-points">' +
+          lines.map(p => `<li>${escapeHtml(p)}</li>`).join('') + '</ul>';
+        if (currentListing) currentListing.points = lines;
+      } else {
+        body.textContent = val;
+        if (currentListing) currentListing[key] = val;
+      }
+      body.classList.remove('editing');
+      btn.textContent = '✏️ Edit';
+    } else {
+      // starting edit
+      const text = key === 'points'
+        ? [...body.querySelectorAll('li')].map(li => li.textContent).join('\n')
+        : body.textContent.trim();
+      body.classList.add('editing');
+      body.innerHTML = `<textarea>${escapeHtml(text)}</textarea>`;
+      btn.textContent = '✅ Done';
+      body.querySelector('textarea').focus();
+    }
+  });
+
+  function showToast(msg) {
+    toast.textContent = msg;
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 1800);
+  }
+})();
+</script>
+</body>
+</html>
