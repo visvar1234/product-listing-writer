@@ -1,0 +1,12 @@
+{
+  "name": "product-listing-writer",
+  "version": "1.0.0",
+  "description": "AI-powered product listing writer for small businesses — Shopee, Lazada & TikTok Shop",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

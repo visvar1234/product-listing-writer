@@ -5,16 +5,17 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-const CONFIG = JSON.parse(fs.readFileSync(process.env.ILMU_CONFIG_PATH || path.join(process.env.USERPROFILE, '.ilmucode', 'v2', 'config.json'), 'utf8'));
-const provider = CONFIG.provider['builtin:ilmu'];
-// config.local.js (git-ignored) can override: module.exports = { apiKey: '...', baseURL: '...', model: '...' }
+const CONFIG_PATH = process.env.ILMU_CONFIG_PATH || path.join(process.env.USERPROFILE || process.env.HOME || '', '.ilmucode', 'v2', 'config.json');
+let provider = null;
+try { provider = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8')).provider['builtin:ilmu']; } catch {}
+// Priority: env var (Railway) > config.local.js (local dev) > ILMUcode config (local fallback)
 let local = {};
 try { local = require('./config.local.js'); } catch {}
-const apiKey = local.apiKey || provider.options.apiKey;
-const baseURL = local.baseURL || provider.options.baseURL;
-const MODEL = local.model || 'ilmu-glm-5.3';
+const apiKey = process.env.ILMU_API_KEY || local.apiKey || (provider && provider.options.apiKey);
+const baseURL = process.env.ILMU_BASE_URL || local.baseURL || (provider && provider.options.baseURL) || 'https://api.ilmu.ai/anthropic';
+const MODEL = process.env.ILMU_MODEL || local.model || 'ilmu-glm-5.3';
 
-const PORT = 3456;
+const PORT = process.env.PORT || 3456;
 const DIR = __dirname;
 
 const LANG_NAMES = { en: 'English', bm: 'Bahasa Melayu', zh: 'Chinese (Simplified)' };
