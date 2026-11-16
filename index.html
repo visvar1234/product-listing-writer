@@ -544,19 +544,24 @@
   // Downscale large photos before upload — faster requests, smaller payloads.
   function compressImage(file, maxDim = 1024) {
     return new Promise((resolve) => {
+      const fallback = () => resolve(file);
       const img = new Image();
       const url = URL.createObjectURL(file);
+      const guard = setTimeout(fallback, 5000); // never stall on a bad image decode
       img.onload = () => {
         URL.revokeObjectURL(url);
-        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
-        if (scale === 1 && file.type === 'image/jpeg') { resolve(file); return; }
-        const canvas = document.createElement('canvas');
-        canvas.width = Math.round(img.width * scale);
-        canvas.height = Math.round(img.height * scale);
-        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-        canvas.toBlob(b => resolve(b || file), 'image/jpeg', 0.85);
+        clearTimeout(guard);
+        try {
+          const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+          if (scale === 1 && file.type === 'image/jpeg') { resolve(file); return; }
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.round(img.width * scale);
+          canvas.height = Math.round(img.height * scale);
+          canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+          canvas.toBlob(b => resolve(b || file), 'image/jpeg', 0.85);
+        } catch { fallback(); }
       };
-      img.onerror = () => resolve(file);
+      img.onerror = () => { URL.revokeObjectURL(url); clearTimeout(guard); fallback(); };
       img.src = url;
     });
   }
@@ -597,13 +602,25 @@
   }
 
   /* ---------- Generate / Regenerate ---------- */
-  let variant = 0;
+  let variant = 0, progressTimer = null;
+  function startProgress() {
+    const msg = generatingEl.querySelector('.spinner').nextElementSibling;
+    const t0 = Date.now();
+    clearInterval(progressTimer);
+    progressTimer = setInterval(() => {
+      const s = Math.round((Date.now() - t0) / 1000);
+      msg.textContent = s < 45
+        ? `AI is writing your listing… ${s}s`
+        : `Still working… ${s}s (usually done in under 30s)`;
+    }, 1000);
+  }
+  function stopProgress() { clearInterval(progressTimer); }
+
   function runGeneration() {
     resultsEl.style.display = 'none';
     generatingEl.style.display = 'block';
-    generatingEl.querySelector('.spinner').nextElementSibling.textContent =
-      window.ILMU_CONFIG ? 'AI is analyzing your photo and writing your listing…' : 'AI is writing your listing…';
     generateBtn.disabled = true;
+    startProgress();
 
     const name = $('product-name').value.trim();
     const lang = $('language').value, market = $('marketplace').value;
@@ -611,20 +628,27 @@
     callAI(name, lang, market, selectedCategory, photoFile)
       .catch(err => {
         console.error('AI generation failed:', err);
-        if (err && err.name !== 'AbortError' && !/404|405|Failed to fetch/i.test(String(err.message || err))) {
-          showToast('AI unavailable — using template fallback');
-        }
+        showToast(err && err.name === 'AbortError'
+          ? 'AI took too long — used template fallback'
+          : 'AI unavailable — using template fallback');
         return null;
       })
       .then(listing => {
-        if (!listing) listing = generateListing(name, lang, market, selectedCategory, variant);
-        variant++;
-        currentListing = listing;
-        generatingEl.style.display = 'none';
-        generateBtn.disabled = false;
-        render(listing);
-        resultsEl.style.display = 'block';
-        resultsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        try {
+          if (!listing) listing = generateListing(name, lang, market, selectedCategory, variant);
+          variant++;
+          currentListing = listing;
+          render(listing);
+          resultsEl.style.display = 'block';
+          resultsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } catch (err) {
+          console.error('Render failed:', err);
+          showToast('Something went wrong — please try again');
+        } finally {
+          stopProgress();
+          generatingEl.style.display = 'none';
+          generateBtn.disabled = false;
+        }
       });
   }
 

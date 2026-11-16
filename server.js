@@ -7,8 +7,12 @@ const path = require('path');
 
 const CONFIG = JSON.parse(fs.readFileSync(process.env.ILMU_CONFIG_PATH || path.join(process.env.USERPROFILE, '.ilmucode', 'v2', 'config.json'), 'utf8'));
 const provider = CONFIG.provider['builtin:ilmu'];
-const { apiKey, baseURL } = provider.options;
-const MODEL = 'ilmu-glm-5.3';
+// config.local.js (git-ignored) can override: module.exports = { apiKey: '...', baseURL: '...', model: '...' }
+let local = {};
+try { local = require('./config.local.js'); } catch {}
+const apiKey = local.apiKey || provider.options.apiKey;
+const baseURL = local.baseURL || provider.options.baseURL;
+const MODEL = local.model || 'ilmu-glm-5.3';
 
 const PORT = 3456;
 const DIR = __dirname;
@@ -69,11 +73,19 @@ const server = http.createServer((req, res) => {
         }
         content.push({ type: 'text', text: buildPrompt(name, lang, market, cat) });
 
-        const apiRes = await fetch(baseURL + '/v1/messages', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-          body: JSON.stringify({ model: MODEL, max_tokens: 2000, messages: [{ role: 'user', content }] })
-        });
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 90000);
+        let apiRes;
+        try {
+          apiRes = await fetch(baseURL + '/v1/messages', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+            body: JSON.stringify({ model: MODEL, max_tokens: 2000, messages: [{ role: 'user', content }] }),
+            signal: controller.signal
+          });
+        } finally {
+          clearTimeout(timeout);
+        }
         if (!apiRes.ok) throw new Error('ILMU API ' + apiRes.status + ': ' + (await apiRes.text()).slice(0, 200));
         const data = await apiRes.json();
         const text = (data.content || []).filter(c => c.type === 'text').map(c => c.text).join('');
